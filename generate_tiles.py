@@ -5,7 +5,7 @@
 # C = nub
 # D = blank
 
-from typing import Tuple
+from typing import Tuple, List
 from itertools import product
 from PIL import Image, ImageDraw
 from enum import Enum
@@ -32,16 +32,17 @@ class ShapeType(Enum):
 class Color(Enum):
     WHITE = (255,255,255,255)
     BLACK = (0,0,0,255)
+    LIGHT_GREY = (216, 216, 216, 255)
 
 class SideNode:
-    def __init__(self, shape_type: ShapeType, point: Tuple(float, float)):
+    def __init__(self, shape_type: ShapeType, point: Tuple[float, float]):
         self.shape_type = shape_type
         self.point = point
     def reserve(self):
         self.reserved = True
 
 class Tile:
-    def __init__(self, sides: tuple(ShapeType, ShapeType, ShapeType, ShapeType)):
+    def __init__(self, sides: Tuple[ShapeType, ShapeType, ShapeType, ShapeType]):
         self.shapes = []
         SideNodes = (
             SideNode(sides[top_index], top_pt), 
@@ -50,21 +51,43 @@ class Tile:
             SideNode(sides[left_index], left_pt)
         )
         for i in range(4):
-            this=i
-            right=index_rollover(1, 4, i)
-            opposite=index_rollover(2, 4, i)
-            left=index_rollover(3, 4, i)
+            # keep "rotating" the tile, comparing sides to find matching shapes,
+            # then mark the sides with a found shape as "reserved"
+            thisSide=SideNodes[i]
+            rightSide=SideNodes[index_rollover(right_index, 4, i)]
+            oppositeSide=SideNodes[index_rollover(bot_index, 4, i)]
+            leftSide=SideNodes[index_rollover(left_index, 4, i)]
 
-            # todo: you stopped here, implement this for all shapes
+            if thisSide.shape_type == ShapeType.BLANK:
+                thisSide.reserve()
+                blank = Blank()
+                self.shapes.append(blank)
+                
+            elif thisSide.shape_type == ShapeType.NUB:
+                thisSide.reserve()
+                nub = Nub(thisSide.point, Color.BLACK, PX_PER_TILE)
+                self.shapes.append(nub)
+            
+            elif thisSide.shape_type == ShapeType.LINE:
+                if oppositeSide.shape_type == ShapeType.LINE:
+                    # we've found a line between this and the opposite side
+                    thisSide.reserve()
+                    oppositeSide.reserve()
+                    line = Line([thisSide.point, oppositeSide.point], Color.BLACK, PX_PER_TILE)
+                    self.shapes.append(line)
 
-            if SideNodes[this].shape_type == ShapeType.CORNER:
-                if SideNodes[left].shape_type == ShapeType.CORNER:
+            elif thisSide.shape_type == ShapeType.CORNER:
+                if rightSide.shape_type == ShapeType.CORNER:
                     # we've found a corner between two side nodes
-                    SideNodes[this].reserve()
-                    SideNodes[left].reserve()
-                    corner = Corner([SideNodes[this].point, SideNodes[left].point], Color.BLACK, PX_PER_TILE)
+                    thisSide.reserve()
+                    rightSide.reserve()
+                    corner = Corner([thisSide.point, rightSide.point], Color.BLACK, PX_PER_TILE)
                     self.shapes.append(corner)
+            
+            else:
+                raise Exception("unknown shape type")
 
+        print(SideNodes)
 
 
 def index_rollover(original_position: int, size: int, increase: int) -> int:
@@ -73,23 +96,24 @@ def index_rollover(original_position: int, size: int, increase: int) -> int:
 
 # Shape captures the necessary methods to draw a shape within a square canvas
 class Shape:
-    def __init__(self, points: list(Tuple(float, float)), shape_type: ShapeType, color: Tuple(int, int, int, int), canvas_px: int):
+    def __init__(self, points: List[Tuple[float, float]], shape_type: ShapeType, color: Tuple[int, int, int, int], canvas_px: int):
         self.shape_type = shape_type
         self.color = color
         self.canvas_px = canvas_px
+        self.points = points
+
+    def draw(self, draw: ImageDraw):
+       pass
+
+class Corner(Shape):
+    def __init__(self, points: List[Tuple[float, float]], color: Tuple[int, int, int, int], canvas_px: int):
+        Shape.__init__(self, points, ShapeType.CORNER, color, canvas_px)
         if len(points) != 2:
             raise Exception
         else:
             self.pta = points[0]
             self.ptb = points[1]
 
-    def draw(self, draw: ImageDraw):
-       pass
-
-class Corner(Shape):
-    def __init__(self, points: list(Tuple(float, float)), color: Tuple(int, int, int, int), canvas_px: int):
-        Shape.__init__(self, points, ShapeType.CORNER, color, canvas_px)
-        
     def draw(self, draw: ImageDraw):
         # top right
         if self.pta == (0.5,0) and self.ptb == (1,0.5) or self.pta == (1,0.5) and self.ptb == (0.5,0):
@@ -115,11 +139,38 @@ class Corner(Shape):
             raise Exception
 
         circle_xy0_px=tuple_multiply(circle_xy0, self.canvas_px)
-        circle_xy1_px=tuple_add(circle_xy0_px, self.canvas_px)
+        circle_xy1_px=tuple_multiply((0.5, 0.5), self.canvas_px)
+
+        print(f'{(circle_xy0_px,circle_xy1_px)}, {start_deg}, {end_deg},{int(self.canvas_px*LINE_WIDTH_PCT)}')
         
-        draw.arc((circle_xy0_px,circle_xy1_px), start_deg, end_deg, fill=self.color, width=self.canvas_px*LINE_WIDTH_PCT)
+        draw.arc((circle_xy0_px,circle_xy1_px), start_deg, end_deg, fill=self.color.value, width=int(self.canvas_px*LINE_WIDTH_PCT))
 
         return
+
+class Line(Shape):
+    def __init__(self, points: List[Tuple[float, float]], color: Tuple[int, int, int, int], canvas_px: int):
+        Shape.__init__(self, points, ShapeType.LINE, color, canvas_px)
+        if len(points) != 2:
+            raise Exception
+        else:
+            self.pta = points[0]
+            self.ptb = points[1]
+
+    def draw(self, draw: ImageDraw):
+        pass
+
+
+class Nub(Shape):
+    def __init__(self, points: Tuple[float, float], color: Tuple[int, int, int, int], canvas_px: int):
+        Shape.__init__(self, points, ShapeType.NUB, color, canvas_px)
+        self.pt = points
+
+class Blank(Shape):
+    def __init__(self):
+        pass
+
+    def draw(self, draw: ImageDraw):
+        pass
 
 def tuple_multiply(t: Tuple, multiple: int) -> Tuple:
     return tuple(multiple*x for x in t)
@@ -175,19 +226,19 @@ def filter(unfiltered: list) -> list:
 
 def main():
     prods = filter(get_all_products())
-    for p in prods:
-        print(p)
     print(len(prods))
 
-    prods = [('D', 'C', 'D', 'C')]
+    prods = [(ShapeType.CORNER, ShapeType.BLANK, ShapeType.BLANK, ShapeType.CORNER)]
     for p in prods:
-        im = Image.new('RGBA', (200, 200), (216, 216, 216, 255)) 
+        im = Image.new('RGBA', (PX_PER_TILE, PX_PER_TILE), Color.LIGHT_GREY.value) 
         draw = ImageDraw.Draw(im)
         #draw.arc(((-100, -100), (100,100)), 0, 90, fill=(255, 255, 0, 128), width=12)
 
+        tile = Tile(p)
+        for shape in tile.shapes:
+            shape.draw(draw)
 
-
-        draw.line((left_pt, right_pt), fill=(255, 255, 0, 128), width=12)
+        #draw.line((left_pt, right_pt), fill=(255, 255, 0, 128), width=12)
         im.show()
 
 if __name__ == "__main__":
