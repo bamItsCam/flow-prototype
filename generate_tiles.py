@@ -16,7 +16,7 @@ right_index = 1
 bot_index = 2
 left_index = 3
 
-PX_PER_TILE = 200
+PX_PER_TILE = 300
 LINE_WIDTH_PCT = 0.06
 
 top_pt = (0.5, 0)
@@ -99,26 +99,26 @@ class Corner(Shape):
     def draw(self, draw: ImageDraw):
         # top right
         if self.pta == top_pt and self.ptb == right_pt or self.pta == right_pt and self.ptb == top_pt:
-            circle_xy0 = (0.5, -0.5)
-            circle_xy1 = (1.5, 0.5)
+            circle_xy0 = (0.5-LINE_WIDTH_PCT/2, -0.5-LINE_WIDTH_PCT/2)
+            circle_xy1 = (1.5+LINE_WIDTH_PCT/2, 0.5+LINE_WIDTH_PCT/2)
             start_deg = 90
             end_deg = 180
         # bot right
         elif self.pta == bot_pt and self.ptb == right_pt or self.pta == right_pt and self.ptb == bot_pt:
-            circle_xy0 = (0.5, 0.5)
-            circle_xy1 = (1.5, 1.5)
+            circle_xy0 = (0.5-LINE_WIDTH_PCT/2, 0.5-LINE_WIDTH_PCT/2)
+            circle_xy1 = (1.5+LINE_WIDTH_PCT/2, 1.5+LINE_WIDTH_PCT/2)
             start_deg = 180
             end_deg = 270
         # bot left
         elif self.pta == bot_pt and self.ptb == left_pt or self.pta == left_pt and self.ptb == bot_pt:
-            circle_xy0 = (-0.5, 0.5)
-            circle_xy1 = (0.5, 1.5)
+            circle_xy0 = (-0.5-LINE_WIDTH_PCT/2, 0.5-LINE_WIDTH_PCT/2)
+            circle_xy1 = (0.5+LINE_WIDTH_PCT/2, 1.5+LINE_WIDTH_PCT/2)
             start_deg = 270
             end_deg = 360
         # top left
         elif self.pta == top_pt and self.ptb == left_pt or self.pta == left_pt and self.ptb == top_pt:
-            circle_xy0 = (-0.5, -0.5)
-            circle_xy1 = (0.5, 0.5)
+            circle_xy0 = (-0.5-LINE_WIDTH_PCT/2, -0.5-LINE_WIDTH_PCT/2)
+            circle_xy1 = (0.5+LINE_WIDTH_PCT/2, 0.5+LINE_WIDTH_PCT/2)
             start_deg = 0
             end_deg = 90
         else:
@@ -346,7 +346,7 @@ def tuple_multiply(t: Tuple, multiple: int) -> Tuple:
     return tuple(multiple * x for x in t)
 
 
-def tuple_add(t: Tuple, addition: int) -> Tuple:
+def tuple_add(t: Tuple, addition: any) -> Tuple:
     return tuple(x + addition for x in t)
 
 
@@ -458,14 +458,23 @@ def dedupe_rotational_symmetry(duped: list) -> list:
 
     return deduped
 
+def gen_starting_tiles(colors: List[Color]) -> List[ColoredTile]:
+    starters = []
+    quad_nub = (ShapeType.NUB, ShapeType.NUB, ShapeType.NUB, ShapeType.NUB)
+    pattern = TilePattern(quad_nub)
+    for color in colors:
+        starting = pattern.generate_colored([color])
+        starters = starters + starting + starting
+    return starters
+
 
 def main():
     legal_shape_layouts = dedupe_rotational_symmetry(filter_illegal(get_all_products()))
     print(len(legal_shape_layouts))
 
-    legal_shape_layouts = [(ShapeType.CORNER, ShapeType.CORNER, ShapeType.CORNER, ShapeType.CORNER)]
-    colored_tiles = []
-    colors = [Color.RED, Color.ORANGE, Color.YELLOW, Color.GREEN, Color.BLUE, Color.PURPLE, Color.PINK]
+    #legal_shape_layouts = [(ShapeType.CORNER, ShapeType.CORNER, ShapeType.CORNER, ShapeType.CORNER)]
+    colors = [Color.RED, Color.ORANGE, Color.YELLOW, Color.GREEN, Color.BLUE, Color.PURPLE, Color.PINK, Color.BLACK]
+    colored_tiles = gen_starting_tiles(colors)
     for shapes in legal_shape_layouts:
         pattern = TilePattern(shapes)
         new_tiles = pattern.generate_colored(colors)
@@ -473,12 +482,14 @@ def main():
             print(str(tile))
         colored_tiles = colored_tiles + new_tiles
 
-        for tile in new_tiles:
-            im = Image.new('RGBA', (PX_PER_TILE, PX_PER_TILE), Color.LIGHT_GREY.value)
-            drawer = ImageDraw.Draw(im)
-            tile.draw(drawer)
-
-            im.show()
+    i = 0
+    for tile in colored_tiles:
+        im = Image.new('RGBA', (PX_PER_TILE, PX_PER_TILE), Color.LIGHT_GREY.value)
+        drawer = ImageDraw.Draw(im)
+        tile.draw(drawer)
+        #im.show()
+        im.save(f'tiles/{i}.png', "PNG")
+        i += 1
     print(len(colored_tiles))
 
 
