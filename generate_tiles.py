@@ -5,10 +5,12 @@
 # C = nub
 # D = blank
 import copy
+import pathlib
+import shutil
 from dataclasses import dataclass
 from typing import Tuple, List
 from itertools import product
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFont
 from enum import Enum
 
 top_index = 0
@@ -72,7 +74,7 @@ class Shape:
         return f'{self.shape_type.value} {self.points} {self.color}'
 
     def draw(self, draw: ImageDraw):
-        pass
+        raise NotImplementedError
 
     def set_color(self, color: Color):
         self.color = color
@@ -234,14 +236,32 @@ class Blank(Shape):
     def __init__(self):
         Shape.__init__(self, ShapeType.BLANK, None, PX_PER_TILE)
 
-    def draw(self, draw: ImageDraw):
+    def draw(self, background: Image) -> Image:
         pass
 
     def set_color(self, color: Color):
         pass
 
 
-class ColoredTile:
+class Tile:
+    def draw(self, background: Image) -> Image:
+        drawer = ImageDraw.Draw(background)
+        font = ImageFont.truetype("fonts/OpenSans-Regular.ttf", 32)
+        drawer.text(tuple_multiply((0.03, 0.85), PX_PER_TILE), "4+", Color.WHITE.value, font)
+
+
+class NoveltyTile(Tile):
+    def __init__(self, image_path: str):
+        self.image_path = image_path
+
+    def draw(self, background: Image) -> Image:
+        foreground = Image.open(self.image_path).resize(background.size)
+        composite_im = Image.alpha_composite(background.convert('RGBA'), foreground.convert('RGBA'))
+        super().draw(composite_im)
+        return composite_im
+
+
+class PathTile(Tile):
     def __init__(self, shapes: List[Shape]):
         self.shapes = shapes
 
@@ -249,12 +269,15 @@ class ColoredTile:
         return f'Shapes: {[str(s) for s in self.shapes ]}'
         #return f'{self.shapes}'
 
-    def draw(self, draw: ImageDraw):
+    def draw(self, background: Image) -> Image:
+        drawer = ImageDraw.Draw(background)
         for shape in self.shapes:
-            shape.draw(draw)
+            shape.draw(drawer)
+        super().draw(background)
+        return background
 
     def __eq__(self, other):
-        if not isinstance(other, ColoredTile):
+        if not isinstance(other, PathTile):
             # don't attempt to compare against unrelated types
             return NotImplemented
 
@@ -320,7 +343,7 @@ class TilePattern:
             else:
                 raise Exception("unknown shape type")
 
-    def generate_colored(self, colors: List[Color]) -> List[ColoredTile]:
+    def generate_colored(self, colors: List[Color]) -> List[PathTile]:
         colored_tiles = []
         colored_shapes = []
         for s in self.shapes:
@@ -336,7 +359,7 @@ class TilePattern:
                 shape.set_color(color)
                 colored_shapes.append(shape)
 
-            new_tile = ColoredTile(colored_shapes)
+            new_tile = PathTile(colored_shapes)
             if new_tile not in colored_tiles:
                 colored_tiles.append(new_tile)
         return colored_tiles
@@ -438,7 +461,6 @@ def filter_illegal(unfiltered: list) -> list:
 
     return apply_filter_blank(apply_filter_tee(apply_filter_line(apply_filter_corner(unfiltered))))
 
-
 def dedupe_rotational_symmetry(duped: list) -> list:
     deduped = []
     for d in duped:
@@ -458,7 +480,7 @@ def dedupe_rotational_symmetry(duped: list) -> list:
 
     return deduped
 
-def gen_starting_tiles(colors: List[Color]) -> List[ColoredTile]:
+def gen_starting_tiles(colors: List[Color]) -> List[PathTile]:
     starters = []
     quad_nub = (ShapeType.NUB, ShapeType.NUB, ShapeType.NUB, ShapeType.NUB)
     pattern = TilePattern(quad_nub)
@@ -468,29 +490,57 @@ def gen_starting_tiles(colors: List[Color]) -> List[ColoredTile]:
     return starters
 
 
+def gen_novelty_tiles(count: int, incl_star: bool) -> List[NoveltyTile]:
+    tiles = []
+    assets_dir = "assets"
+    novelty_shapes = ["flip.png", "rotate.png"]
+    if incl_star:
+        novelty_shapes.append("star.png")
+
+    for shape in novelty_shapes:
+        for i in range(count):
+            tiles.append(NoveltyTile(assets_dir + "/" + shape))
+    return tiles
+
+
+def draw_tiles(tiles: List[Tile], out_dir: str):
+    shutil.rmtree(out_dir)
+    pathlib.Path(out_dir).mkdir(parents=True, exist_ok=True)
+    i = 0
+    for tile in tiles:
+        background = Image.new('RGBA', (PX_PER_TILE, PX_PER_TILE), Color.LIGHT_GREY.value)
+        im = tile.draw(background)
+        # im.show()
+        im.save(f'{out_dir}/{i}.png', "PNG")
+        i += 1
+    print(len(tiles))
+
+
 def main():
     legal_shape_layouts = dedupe_rotational_symmetry(filter_illegal(get_all_products()))
     print(len(legal_shape_layouts))
 
     #legal_shape_layouts = [(ShapeType.CORNER, ShapeType.CORNER, ShapeType.CORNER, ShapeType.CORNER)]
-    colors = [Color.RED, Color.ORANGE, Color.YELLOW, Color.GREEN, Color.BLUE, Color.PURPLE, Color.PINK, Color.BLACK]
-    colored_tiles = gen_starting_tiles(colors)
+    #colors = [Color.RED, Color.ORANGE, Color.YELLOW, Color.GREEN, Color.BLUE, Color.PURPLE, Color.PINK, Color.BLACK]
+    colors = [Color.RED, Color.YELLOW, Color.GREEN, Color.BLUE]
+    path_tiles = gen_starting_tiles(colors)
+    path_tiles_wout_tee = path_tiles
     for shapes in legal_shape_layouts:
         pattern = TilePattern(shapes)
         new_tiles = pattern.generate_colored(colors)
         for tile in new_tiles:
             print(str(tile))
-        colored_tiles = colored_tiles + new_tiles
+        path_tiles = path_tiles + new_tiles
+        if shapes[0] != ShapeType.TEE and shapes[1] != ShapeType.TEE:
+            path_tiles_wout_tee = path_tiles_wout_tee + new_tiles
 
-    i = 0
-    for tile in colored_tiles:
-        im = Image.new('RGBA', (PX_PER_TILE, PX_PER_TILE), Color.LIGHT_GREY.value)
-        drawer = ImageDraw.Draw(im)
-        tile.draw(drawer)
-        #im.show()
-        im.save(f'tiles/{i}.png', "PNG")
-        i += 1
-    print(len(colored_tiles))
+    tiles = path_tiles + gen_novelty_tiles(len(colors), False)
+    out_dir = "tilesA"
+    draw_tiles(tiles, out_dir)
+
+    tiles = path_tiles_wout_tee + gen_novelty_tiles(len(colors), True)
+    out_dir = "tilesB"
+    draw_tiles(tiles, out_dir)
 
 
 if __name__ == "__main__":

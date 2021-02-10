@@ -40,13 +40,13 @@ class TestColoredTile(TestCase):
         red_nub1.set_color(Color.RED)
         red_nub2 = Nub((1, 1), PX_PER_TILE)
         red_nub2.set_color(Color.RED)
-        tile1 = ColoredTile([green_corner1, green_corner2, green_nub1, green_nub2])
-        tile2 = ColoredTile([green_corner1, green_corner2, red_nub1, green_nub2])
+        tile1 = PathTile([green_corner1, green_corner2, green_nub1, green_nub2])
+        tile2 = PathTile([green_corner1, green_corner2, red_nub1, green_nub2])
         self.assertNotEqual(tile1, tile2)
 
-        tile3 = ColoredTile([green_nub1, green_nub2, red_nub1, red_nub2])
-        tile4 = ColoredTile([red_nub1, red_nub2, green_nub1, green_nub2])
-        tile5 = ColoredTile([red_nub1, green_nub1, green_nub1, green_nub2])
+        tile3 = PathTile([green_nub1, green_nub2, red_nub1, red_nub2])
+        tile4 = PathTile([red_nub1, red_nub2, green_nub1, green_nub2])
+        tile5 = PathTile([red_nub1, green_nub1, green_nub1, green_nub2])
         self.assertEqual(tile3, tile4)
         self.assertNotEqual(tile3, tile5)
 
@@ -60,5 +60,5 @@ class TestTilePattern(TestCase):
         red_right_nub.set_color(Color.RED)
         green_right_nub.set_color(Color.GREEN)
         generated = tile1.generate_colored([Color.RED, Color.GREEN])
-        expected = [ColoredTile([blank, blank, blank, green_right_nub]), ColoredTile([blank, blank, blank, red_right_nub])]
+        expected = [PathTile([blank, blank, blank, green_right_nub]), PathTile([blank, blank, blank, red_right_nub])]
         self.assertCountEqual(generated, expected)
